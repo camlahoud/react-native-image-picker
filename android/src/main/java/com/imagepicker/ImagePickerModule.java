@@ -222,6 +222,9 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       if (videoDurationLimit > 0) {
         cameraIntent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, videoDurationLimit);
       }
+      File videoFile = createTempVideoFile();
+      mCameraCaptureURI = Uri.fromFile(videoFile);
+      cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, mCameraCaptureURI);
     } else {
       requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
       cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -325,15 +328,21 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
         uri = data.getData();
         break;
       case REQUEST_LAUNCH_VIDEO_LIBRARY:
-        response.putString("uri", data.getData().toString());
-        response.putString("path", getRealPathFromURI(data.getData()));
+        uri = data.getData();
+        response.putString("uri", uri.toString());
+        response.putString("path", getRealPathFromURI(uri));
+//        response.putString("uri", data.getData().toString());
+//        response.putString("path", getRealPathFromURI(data.getData()));
         mCallback.invoke(response);
         mCallback = null;
         return;
       case REQUEST_LAUNCH_VIDEO_CAPTURE:
-        response.putString("uri", data.getData().toString());
-        response.putString("path", getRealPathFromURI(data.getData()));
-        this.fileScan(response.getString("path"));
+        uri = mCameraCaptureURI;
+        response.putString("uri", uri.toString());
+        response.putString("path", getRealPathFromURI(uri));
+//        response.putString("uri", data.getData().toString());
+//        response.putString("path", getRealPathFromURI(data.getData()));
+//        this.fileScan(response.getString("path"));
         mCallback.invoke(response);
         mCallback = null;
         return;
@@ -665,6 +674,31 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
    */
   private File createNewFile() {
     String filename = "image-" + UUID.randomUUID().toString() + ".jpg";
+    File path;
+    if (tmpImage) {
+      path = mReactContext.getExternalCacheDir();
+    } else {
+      path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+    }
+
+    File f = new File(path, filename);
+    try {
+      path.mkdirs();
+      f.createNewFile();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+
+    return f;
+  }
+
+  /**
+   * Create a temp video file
+   *
+   * @return an empty video file
+   */
+  private File createTempVideoFile() {
+    String filename = "vid-" + UUID.randomUUID().toString() + ".mp4";
     File path;
     if (tmpImage) {
       path = mReactContext.getExternalCacheDir();
