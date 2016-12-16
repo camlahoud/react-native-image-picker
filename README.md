@@ -3,7 +3,7 @@
 
 This is a fork of the work done by [marcshilling](https://github.com/marcshilling/react-native-image-picker) to introduce some minor change:
 - Android: Modified video capture to save to a temp folder instead of the standard camera folder
-- Android: Added code to generate a thumbnail for selected/captured video, it will be added to the response object under the key "thumb"
+- Android/iOS: Added code to generate a thumbnail for selected/captured video, it will be added to the response object under the key "thumb"
 
 A React Native module that allows you to use native UI to select a photo/video from the device library or directly from the camera, like so:
 
@@ -202,4 +202,4 @@ latitude | OK | OK | Latitude metadata, if available
 longitude | OK | OK | Longitude metadata, if available
 timestamp | OK | OK | Timestamp metadata, if available, in ISO8601 UTC format
 originalRotation | - | OK | Rotation degrees (photos only) *See [#109](/../../issues/199)*
-thumb | - | OK  | A thumbnail of selected video
+thumb | OK | OK  | A thumbnail of selected video

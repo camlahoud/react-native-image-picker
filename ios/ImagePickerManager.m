@@ -3,6 +3,7 @@
 #import <AssetsLibrary/AssetsLibrary.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
+#import <MediaPlayer/MediaPlayer.h>
 
 @import MobileCoreServices;
 
@@ -462,6 +463,8 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
             }
             
             [self.response setObject:videoDestinationURL.absoluteString forKey:@"uri"];
+            //Add thumbnail
+            self.response[@"thumb"] = [self imageFromMovie:videoDestinationURL atTime:0];
             if (videoRefURL.absoluteString) {
                 [self.response setObject:videoRefURL.absoluteString forKey:@"origURL"];
             }
@@ -566,6 +569,21 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
     else {
         callback(NO);
     }
+}
+
+- (UIImage *)imageFromMovie:(NSURL *)movieURL atTime:(NSTimeInterval)time {
+    // set up the movie player
+    MPMoviePlayerController *mp = [[MPMoviePlayerController alloc]
+                                   initWithContentURL:movieURL];
+    mp.shouldAutoplay = NO;
+    mp.initialPlaybackTime = time;
+    mp.currentPlaybackTime = time;
+    // get the thumbnail
+    UIImage *thumbnail = [mp thumbnailImageAtTime:time
+                                       timeOption:MPMovieTimeOptionNearestKeyFrame];
+    // clean up the movie player
+    [mp stop];
+    return [UIImagePNGRepresentation(thumbnail) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
 }
 
 - (UIImage*)downscaleImageIfNecessary:(UIImage*)image maxWidth:(float)maxWidth maxHeight:(float)maxHeight
