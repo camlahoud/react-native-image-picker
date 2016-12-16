@@ -1,6 +1,10 @@
 
 # React Native Image Picker [![npm version](https://badge.fury.io/js/react-native-image-picker.svg)](https://badge.fury.io/js/react-native-image-picker) [![npm](https://img.shields.io/npm/dt/react-native-image-picker.svg)](https://www.npmjs.org/package/react-native-image-picker) ![MIT](https://img.shields.io/dub/l/vibe-d.svg) ![Platform - Android and iOS](https://img.shields.io/badge/platform-Android%20%7C%20iOS-yellow.svg)
 
+This is a fork of the work done by [marcshilling](https://github.com/marcshilling/react-native-image-picker) to introduce some minor change:
+- Android: Modified video capture to save to a temp folder instead of the standard camera folder
+- Android: Added code to generate a thumbnail for selected/captured video, it will be added to the response object under the key "thumb"
+
 A React Native module that allows you to use native UI to select a photo/video from the device library or directly from the camera, like so:
 
 iOS | Android
@@ -198,3 +202,4 @@ latitude | OK | OK | Latitude metadata, if available
 longitude | OK | OK | Longitude metadata, if available
 timestamp | OK | OK | Timestamp metadata, if available, in ISO8601 UTC format
 originalRotation | - | OK | Rotation degrees (photos only) *See [#109](/../../issues/199)*
+thumb | - | OK  | A thumbnail of selected video

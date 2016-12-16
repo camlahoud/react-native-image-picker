@@ -13,6 +13,7 @@ import android.graphics.BitmapFactory.Options;
 import android.graphics.Matrix;
 import android.graphics.drawable.ColorDrawable;
 import android.media.ExifInterface;
+import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -27,6 +28,7 @@ import android.media.MediaScannerConnection;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
@@ -319,6 +321,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     }
 
     Uri uri;
+    String path;
     switch (requestCode) {
       case REQUEST_LAUNCH_IMAGE_CAPTURE:
         uri = mCameraCaptureURI;
@@ -330,7 +333,9 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       case REQUEST_LAUNCH_VIDEO_LIBRARY:
         uri = data.getData();
         response.putString("uri", uri.toString());
-        response.putString("path", getRealPathFromURI(uri));
+        path = getRealPathFromURI(uri);
+        response.putString("path", path);
+        response.putString("thumb", generateThumbnailForVideo(path));
 //        response.putString("uri", data.getData().toString());
 //        response.putString("path", getRealPathFromURI(data.getData()));
         mCallback.invoke(response);
@@ -339,7 +344,9 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       case REQUEST_LAUNCH_VIDEO_CAPTURE:
         uri = mCameraCaptureURI;
         response.putString("uri", uri.toString());
-        response.putString("path", getRealPathFromURI(uri));
+        path = getRealPathFromURI(uri);
+        response.putString("path", path);
+        response.putString("thumb", generateThumbnailForVideo(path));
 //        response.putString("uri", data.getData().toString());
 //        response.putString("path", getRealPathFromURI(data.getData()));
 //        this.fileScan(response.getString("path"));
@@ -690,6 +697,17 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     }
 
     return f;
+  }
+
+  /**
+   * Generate a thumbnail for video
+   */
+  private String generateThumbnailForVideo(String path) {
+    Bitmap thumb = ThumbnailUtils.createVideoThumbnail(path, MediaStore.Video.Thumbnails.MINI_KIND);
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    thumb.compress(Bitmap.CompressFormat.JPEG, quality, bytes);
+    byte[] b = bytes.toByteArray();
+    return Base64.encodeToString(b, Base64.DEFAULT);
   }
 
   /**
