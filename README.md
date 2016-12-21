@@ -153,6 +153,23 @@ ImagePicker.launchImageLibrary(options, (response)  => {
 });
 ```
 
+### Just compress a video
+
+If you want to just compress a video you can do the following:
+```
+ImagePicker.compressVideo({
+  path: ...
+  durationLimit: ...
+  }, response => {
+    // Response contains: path/uri (similar to picking), and thumb (A base64 thumbnail)
+    })
+```
+
+A potential reason to use this would be to split the process of selecting a video into 2 steps to remain responsive (compression is a bit slow on android).
+
+You would first select a video (using library/camera) using the option of compress set to false.
+Then you would call the compressVideo function with the path that you got
+
 
 #### Note
 On iOS, don't assume that the absolute uri returned will persist. See [#107](/../../issues/107)
@@ -172,10 +189,11 @@ maxWidth | OK | OK | Photos only
 maxHeight | OK | OK | Photos only
 quality | OK | OK | 0 to 1, photos only
 videoQuality | OK |  OK | 'low', 'medium', or 'high' on iOS, 'low' or 'high' on Android
-durationLimit | OK | OK | Max video recording time, in seconds
+durationLimit | OK | OK | Max video time, in seconds. If using camera, recording will be limited to this duration. If picking from library, video will be cut to duration starting from 0
 rotation | - | OK | Photos only, 0 to 360 degrees of rotation
 allowsEditing | OK | - | bool - enables built in iOS functionality to resize the image after selection
 noData | OK | OK | If true, disables the base64 `data` field from being generated (greatly improves performance on large photos)
+compress  | OK  | OK | Video: If true, the selected/captured video will be compressed. For now, setting this to true will bypass the storageOptions below and will always save in a temp location.
 storageOptions | OK | OK | If this key is provided, the image will get saved in the Documents directory on iOS, and the Pictures directory on Android (rather than a temporary directory)
 storageOptions.skipBackup | OK | - | If true, the photo will NOT be backed up to iCloud
 storageOptions.path | OK | - | If set, will save image at /Documents/[path] rather than the root

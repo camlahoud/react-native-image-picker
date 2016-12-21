@@ -15,6 +15,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.media.ExifInterface;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.app.ActivityCompat;
@@ -28,7 +29,6 @@ import android.media.MediaScannerConnection;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
@@ -55,6 +55,7 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
 
+
 interface ActivityResultInterface {
   void callback(int requestCode, int resultCode, Intent data);
 }
@@ -74,6 +75,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
   private Boolean noData = false;
   private Boolean tmpImage;
   private Boolean pickVideo = false;
+  private Boolean compress = true;
   private int maxWidth = 0;
   private int maxHeight = 0;
   private int quality = 100;
@@ -302,6 +304,25 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     }
   }
 
+  //Method to compress a video
+  @ReactMethod
+  public void compressVideo(final ReadableMap options, final Callback callback) {
+    mCallback = callback;
+    response = Arguments.createMap();
+    tmpImage = true;
+    if (!options.hasKey("path")) {
+      response.putString("error", "No path provided");
+      callback.invoke(response);
+      return;
+    }
+    String path = options.getString("path");
+    videoDurationLimit = 0;
+    if (options.hasKey("durationLimit")) {
+      videoDurationLimit = options.getInt("durationLimit");
+    }
+    _compressVideo(path);
+  }
+
   public void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
     //robustness code
     if (mCallback == null || (mCameraCaptureURI == null && requestCode == REQUEST_LAUNCH_IMAGE_CAPTURE)
@@ -332,6 +353,11 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
         break;
       case REQUEST_LAUNCH_VIDEO_LIBRARY:
         uri = data.getData();
+        if (compress) {
+          response.putString("uri", uri.toString());
+          _compressVideo(getRealPathFromURI(uri));
+          return;
+        }
         response.putString("uri", uri.toString());
         path = getRealPathFromURI(uri);
         response.putString("path", path);
@@ -343,6 +369,11 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
         return;
       case REQUEST_LAUNCH_VIDEO_CAPTURE:
         uri = mCameraCaptureURI;
+        if (compress) {
+          response.putString("uri", uri.toString());
+          _compressVideo(getRealPathFromURI(uri));
+          return;
+        }
         response.putString("uri", uri.toString());
         path = getRealPathFromURI(uri);
         response.putString("path", path);
@@ -711,6 +742,78 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
   }
 
   /**
+   * Compress the selected video
+   */
+  private void _compressVideo(String path) {
+    File compressedVideo = createTempVideoFile();
+    Uri outputUri = Uri.parse(compressedVideo.getAbsolutePath());
+
+    new ResampleTask().setDurationLimit(videoDurationLimit).execute( Uri.parse(path), outputUri);
+  }
+
+  class ResampleTask extends AsyncTask<Uri, Void, Uri> {
+
+    private Exception exceptionToThrow = null;
+    private int durationLimit = 0;
+
+    public ResampleTask setDurationLimit(int limit) {
+      durationLimit = limit;
+      return this;
+    }
+
+    @Override
+    protected Uri doInBackground( Uri... uris ) {
+
+      if ( uris.length < 2 ) {
+        return null;
+      }
+
+      Uri inputUri = uris[0];
+      Uri outputUri = uris[1];
+
+//      Log.i("ReactNative","Starting background: " + inputUri.toString());
+//      Log.i("ReactNative","Destination: " + outputUri.toString());
+
+      VideoCompressor resampler = new VideoCompressor(inputUri.toString(), outputUri.toString());
+      int rotation = MediaHelper.GetRotation(inputUri);
+      if (rotation == 90) {
+        resampler.setSize(320, 568);
+      } else {
+        resampler.setSize(568, 320);
+      }
+      resampler.setOutputVideoBitrate( 839000 );
+      resampler.setOutputVideoFramerate( 30 );
+      resampler.setOutputVideoIFrameInterval( 10 );
+      if (durationLimit > 0) {
+        resampler.setEndTime(durationLimit);
+      }
+
+      try {
+        resampler.extractDecodeEditEncodeMux();
+      } catch (Exception e) {
+        e.printStackTrace();
+        exceptionToThrow = e;
+      }
+
+      return outputUri;
+    }
+
+    @Override
+    protected void onPostExecute( Uri outputUri ) {
+      if (exceptionToThrow!=null) {
+        response.putString("error","An error occurred");
+        mCallback.invoke(response);
+        return;
+      }
+      response.putString("path", outputUri.getPath().toString());
+      if (!response.hasKey("thumb")) {
+        response.putString("thumb", generateThumbnailForVideo(outputUri.getPath().toString()));
+      }
+      mCallback.invoke(response);
+    }
+  }
+
+  /**
    * Create a temp video file
    *
    * @return an empty video file
@@ -788,6 +891,10 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     videoDurationLimit = 0;
     if (options.hasKey("durationLimit")) {
       videoDurationLimit = options.getInt("durationLimit");
+    }
+    compress = false;
+    if (options.hasKey("compress")) {
+      compress = options.getBoolean("compress");
     }
   }
 

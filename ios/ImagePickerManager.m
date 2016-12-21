@@ -34,6 +34,12 @@ RCT_EXPORT_METHOD(launchImageLibrary:(NSDictionary *)options callback:(RCTRespon
     [self launchImagePicker:RNImagePickerTargetLibrarySingleImage options:options];
 }
 
+RCT_EXPORT_METHOD(compressVideo:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
+{
+    self.callback = callback;
+    [self compressVideo:options:options];
+}
+
 RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
 {
     self.callback = callback; // Save the callback so we can use it from the delegate methods
@@ -432,6 +438,10 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
             NSURL *videoRefURL = info[UIImagePickerControllerReferenceURL];
             NSURL *videoURL = info[UIImagePickerControllerMediaURL];
             NSURL *videoDestinationURL = [NSURL fileURLWithPath:path];
+            NSString *compressedFileName = @"compressed";
+            compressedFileName = [compressedFileName stringByAppendingString:fileName];
+            NSString *compressedPath = [[NSTemporaryDirectory()stringByStandardizingPath] stringByAppendingPathComponent:compressedFileName];
+            NSURL *compressedVideoURL = [NSURL fileURLWithPath:compressedPath];
 
             if (videoRefURL) {
                 PHAsset *pickedAsset = [PHAsset fetchAssetsWithALAssetURLs:@[videoRefURL] options:nil].lastObject;
@@ -445,9 +455,8 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
                     self.response[@"timestamp"] = [[ImagePickerManager ISO8601DateFormatter] stringFromDate:pickedAsset.creationDate];
                 }
             }
-
+            NSFileManager *fileManager = [NSFileManager defaultManager];
             if ([videoURL.URLByResolvingSymlinksInPath.path isEqualToString:videoDestinationURL.URLByResolvingSymlinksInPath.path] == NO) {
-                NSFileManager *fileManager = [NSFileManager defaultManager];
 
                 // Delete file if it already exists
                 if ([fileManager fileExistsAtPath:videoDestinationURL.path]) {
@@ -462,6 +471,33 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
                 }
             }
             
+            if ([[self.options objectForKey:@"compress"] boolValue]) {
+                // Delete file if it already exists
+                if ([fileManager fileExistsAtPath:compressedVideoURL.path]) {
+                    [fileManager removeItemAtURL:compressedVideoURL error:nil];
+                }
+                int duration = 0;
+                id durationLimit = [self.options objectForKey:@"durationLimit"];
+                if (durationLimit) {
+                    duration = [durationLimit integerValue];
+                }
+                [self _compressVideo:videoDestinationURL outputURL:compressedVideoURL duration:duration handler:^(AVAssetExportSession *completion) {
+                    if (completion.status == AVAssetExportSessionStatusCompleted) {
+                        
+                        [self.response setObject:compressedVideoURL.absoluteString forKey:@"uri"];
+                        //Add thumbnail
+                        self.response[@"thumb"] = [self imageFromMovie:compressedVideoURL atTime:0];
+                        if (videoRefURL.absoluteString) {
+                            [self.response setObject:videoRefURL.absoluteString forKey:@"origURL"];
+                        }
+                        self.callback(@[self.response]);
+                    } else if (completion.status == AVAssetExportSessionStatusFailed) {
+                        self.callback(@[@{@"error": completion.error.localizedFailureReason}]);
+                    }
+                }];
+                return;
+            }
+
             [self.response setObject:videoDestinationURL.absoluteString forKey:@"uri"];
             //Add thumbnail
             self.response[@"thumb"] = [self imageFromMovie:videoDestinationURL atTime:0];
@@ -519,6 +555,49 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
     dispatch_async(dispatch_get_main_queue(), ^{
         [picker dismissViewControllerAnimated:YES completion:dismissCompletionBlock];
     });
+}
+
+- (void)compressVideo:options:(NSDictionary *)options {
+    self.options = options;
+    self.response = [[NSMutableDictionary alloc] init];
+    if (![self.options objectForKey:@"path"]) {
+        self.callback(@[@{@"error": @"No path provided"}]);
+        return;
+    }
+    NSString *path = [self.options valueForKey:@"path"];
+    NSURL *videoDestinationURL = [NSURL fileURLWithPath:path];
+    NSString *fileName = videoDestinationURL.lastPathComponent;
+    NSString *compressedFileName = @"compressed";
+    compressedFileName = [compressedFileName stringByAppendingString:fileName];
+    NSString *compressedPath = [[NSTemporaryDirectory()stringByStandardizingPath] stringByAppendingPathComponent:compressedFileName];
+    NSURL *compressedVideoURL = [NSURL fileURLWithPath:compressedPath];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    
+    // Delete file if it already exists
+    if ([fileManager fileExistsAtPath:compressedVideoURL.path]) {
+        [fileManager removeItemAtURL:compressedVideoURL error:nil];
+    }
+    if (![fileManager fileExistsAtPath:videoDestinationURL.path]) {
+        self.callback(@[@{@"error": @"File not found"}]);
+        return;
+    }
+    int duration = 0;
+    id durationLimit = [self.options objectForKey:@"durationLimit"];
+    if (durationLimit) {
+        duration = [durationLimit integerValue];
+    }
+    [self _compressVideo:videoDestinationURL outputURL:compressedVideoURL duration:duration handler:^(AVAssetExportSession *completion) {
+        if (completion.status == AVAssetExportSessionStatusCompleted) {
+            [self.response setObject:compressedVideoURL.absoluteString forKey:@"uri"];
+            //Add thumbnail
+            self.response[@"thumb"] = [self imageFromMovie:compressedVideoURL atTime:0];
+            self.callback(@[self.response]);
+            [fileManager removeItemAtURL:videoDestinationURL error:nil];
+        } else if (completion.status == AVAssetExportSessionStatusFailed) {
+            self.callback(@[@{@"error": completion.error.localizedFailureReason}]);
+        }
+    }];
+    return;
 }
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker
@@ -583,7 +662,34 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
                                        timeOption:MPMovieTimeOptionNearestKeyFrame];
     // clean up the movie player
     [mp stop];
+    thumbnail = [self downscaleImageIfNecessary:thumbnail maxWidth:150 maxHeight:150];
     return [UIImagePNGRepresentation(thumbnail) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
+}
+
+- (void)_compressVideo:(NSURL*)inputURL
+            outputURL:(NSURL*)outputURL
+            duration:(int)duration
+              handler:(void (^)(AVAssetExportSession*))completion  {
+    AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:inputURL options:nil];
+    AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:urlAsset presetName:AVAssetExportPresetMediumQuality];
+    exportSession.outputURL = outputURL;
+    exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+    exportSession.shouldOptimizeForNetworkUse = YES;
+    CMTimeRange timeRange;
+    if (duration > 0 && duration< CMTimeGetSeconds(exportSession.asset.duration)) {
+        timeRange.start = CMTimeMake(0, 1);
+        timeRange.duration = CMTimeMake(duration, 1);
+    }
+    exportSession.timeRange = timeRange;
+    [exportSession exportAsynchronouslyWithCompletionHandler:^{
+        completion(exportSession);
+    }];
+}
+
+- (void)_compressVideo:(NSURL*)inputURL
+            outputURL:(NSURL*)outputURL
+              handler:(void (^)(AVAssetExportSession*))completion {
+    [self _compressVideo:inputURL outputURL:outputURL duration:0 handler:completion];
 }
 
 - (UIImage*)downscaleImageIfNecessary:(UIImage*)image maxWidth:(float)maxWidth maxHeight:(float)maxHeight
