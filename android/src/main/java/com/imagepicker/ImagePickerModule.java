@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
@@ -16,9 +18,11 @@ import android.media.ExifInterface;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.FileProvider;
 import android.util.Base64;
 import android.util.Log;
 import android.widget.ArrayAdapter;
@@ -67,10 +71,14 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
   static final int REQUEST_LAUNCH_VIDEO_LIBRARY = 13003;
   static final int REQUEST_LAUNCH_VIDEO_CAPTURE = 13004;
 
+  static final int MAX_VIDEO_WIDTH = 568; //Used when compressing video
+  static final int MAX_VIDEO_HEIGHT = 568; //Used when compressing video
+
   private final ReactApplicationContext mReactContext;
   private ImagePickerActivityEventListener mActivityEventListener;
 
   private Uri mCameraCaptureURI;
+  private String mCurrentPath;
   private Callback mCallback;
   private Boolean noData = false;
   private Boolean tmpImage;
@@ -227,7 +235,15 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
         cameraIntent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, videoDurationLimit);
       }
       File videoFile = createTempVideoFile();
-      mCameraCaptureURI = Uri.fromFile(videoFile);
+//      mCameraCaptureURI = Uri.fromFile(videoFile);
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+        mCameraCaptureURI = Uri.fromFile(videoFile);
+      } else {
+        cameraIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        mCameraCaptureURI = FileProvider.getUriForFile(mReactContext,
+                mReactContext.getApplicationContext().getPackageName() + ".provider",
+                videoFile);
+      }
       cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, mCameraCaptureURI);
     } else {
       requestCode = REQUEST_LAUNCH_IMAGE_CAPTURE;
@@ -235,7 +251,15 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
 
       // we create a tmp file to save the result
       File imageFile = createNewFile();
-      mCameraCaptureURI = Uri.fromFile(imageFile);
+//      mCameraCaptureURI = Uri.fromFile(imageFile);
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+        mCameraCaptureURI = Uri.fromFile(imageFile);
+      } else {
+        cameraIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        mCameraCaptureURI = FileProvider.getUriForFile(mReactContext,
+                mReactContext.getApplicationContext().getPackageName() + ".provider",
+                imageFile);
+      }
       cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, mCameraCaptureURI);
     }
 
@@ -371,11 +395,11 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
         uri = mCameraCaptureURI;
         if (compress) {
           response.putString("uri", uri.toString());
-          _compressVideo(getRealPathFromURI(uri));
+          _compressVideo(getRealPathFromURI(uri, true));
           return;
         }
         response.putString("uri", uri.toString());
-        path = getRealPathFromURI(uri);
+        path = getRealPathFromURI(uri, true);
         response.putString("path", path);
         response.putString("thumb", generateThumbnailForVideo(path));
 //        response.putString("uri", data.getData().toString());
@@ -558,18 +582,24 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
   }
 
   private String getRealPathFromURI(Uri uri) {
-    String result;
-    String[] projection = {MediaStore.Images.Media.DATA};
-    Cursor cursor = mReactContext.getContentResolver().query(uri, projection, null, null, null);
-    if (cursor == null) { // Source is Dropbox or other similar local file path
-      result = uri.getPath();
+    return getRealPathFromURI(uri, false);
+  }
+
+  private String getRealPathFromURI(Uri uri, Boolean isCamera) {
+    String path;
+
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+      path = RealPathUtil.getRealPathFromURI(mReactContext, uri);
     } else {
-      cursor.moveToFirst();
-      int idx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-      result = cursor.getString(idx);
-      cursor.close();
+      if (isCamera) {
+        Uri imageUri = Uri.parse(mCurrentPath);
+        path = imageUri.getPath();
+      } else {
+        path = RealPathUtil.getRealPathFromURI(mReactContext, uri);
+      }
     }
-    return result;
+
+    return path;
   }
 
   /**
@@ -723,6 +753,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     try {
       path.mkdirs();
       f.createNewFile();
+      mCurrentPath = "file:" + f.getAbsolutePath();
     } catch (IOException e) {
       e.printStackTrace();
     }
@@ -747,7 +778,6 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
   private void _compressVideo(String path) {
     File compressedVideo = createTempVideoFile();
     Uri outputUri = Uri.parse(compressedVideo.getAbsolutePath());
-
     new ResampleTask().setDurationLimit(videoDurationLimit).execute( Uri.parse(path), outputUri);
   }
 
@@ -776,11 +806,17 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
 
       VideoCompressor resampler = new VideoCompressor(inputUri.toString(), outputUri.toString());
       int rotation = MediaHelper.GetRotation(inputUri);
-      if (rotation == 90) {
-        resampler.setSize(320, 568);
+      int width = MediaHelper.GetWidth(inputUri);
+      int height = MediaHelper.GetHeight(inputUri);
+      int twidth, theight;
+      if (width > height) {
+        twidth = 568;
+        theight = 320;
       } else {
-        resampler.setSize(568, 320);
+        theight = 568;
+        twidth = 320;
       }
+      resampler.setSize(twidth, theight);
       resampler.setOutputVideoBitrate( 839000 );
       resampler.setOutputVideoFramerate( 30 );
       resampler.setOutputVideoIFrameInterval( 10 );
@@ -801,7 +837,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     @Override
     protected void onPostExecute( Uri outputUri ) {
       if (exceptionToThrow!=null) {
-        response.putString("error","An error occurred");
+        response.putString("error","An error occurred: "+ exceptionToThrow.getMessage());
         mCallback.invoke(response);
         return;
       }
@@ -831,6 +867,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     try {
       path.mkdirs();
       f.createNewFile();
+      mCurrentPath = "file:" + f.getAbsolutePath();
     } catch (IOException e) {
       e.printStackTrace();
     }
