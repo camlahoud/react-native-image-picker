@@ -241,7 +241,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       } else {
         cameraIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         mCameraCaptureURI = FileProvider.getUriForFile(mReactContext,
-                mReactContext.getApplicationContext().getPackageName() + ".provider",
+                mReactContext.getApplicationContext().getPackageName() + ".fileprovider",
                 videoFile);
       }
       cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, mCameraCaptureURI);
@@ -257,7 +257,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
       } else {
         cameraIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         mCameraCaptureURI = FileProvider.getUriForFile(mReactContext,
-                mReactContext.getApplicationContext().getPackageName() + ".provider",
+                mReactContext.getApplicationContext().getPackageName() + ".fileprovider",
                 imageFile);
       }
       cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, mCameraCaptureURI);
