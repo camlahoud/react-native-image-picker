@@ -15,6 +15,7 @@ import android.graphics.BitmapFactory.Options;
 import android.graphics.Matrix;
 import android.graphics.drawable.ColorDrawable;
 import android.media.ExifInterface;
+import android.media.MediaMetadataRetriever;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -805,9 +806,14 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
 //      Log.i("ReactNative","Destination: " + outputUri.toString());
 
       VideoCompressor resampler = new VideoCompressor(inputUri.toString(), outputUri.toString());
-      int rotation = MediaHelper.GetRotation(inputUri);
-      int width = MediaHelper.GetWidth(inputUri);
-      int height = MediaHelper.GetHeight(inputUri);
+//      int rotation = MediaHelper.GetRotation(inputUri);
+//      int width = MediaHelper.GetWidth(inputUri);
+//      int height = MediaHelper.GetHeight(inputUri);
+      MediaMetadataRetriever metaRetriever = new MediaMetadataRetriever();
+      metaRetriever.setDataSource(inputUri.toString());
+      Bitmap frame = metaRetriever.getFrameAtTime();
+      int width = frame.getWidth();
+      int height = frame.getHeight();
       int twidth, theight;
       if (width > height) {
         twidth = 568;
