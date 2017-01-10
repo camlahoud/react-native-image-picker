@@ -42,7 +42,7 @@ public class VideoCompressor {
     private static final int OUTPUT_AUDIO_CHANNEL_COUNT = 2; // Must match the input stream.
     private int OUTPUT_AUDIO_BIT_RATE = 128 * 1000;
     private static final int OUTPUT_AUDIO_AAC_PROFILE =
-            MediaCodecInfo.CodecProfileLevel.AACObjectHE;
+            MediaCodecInfo.CodecProfileLevel.AACObjectLC;
     private static final int OUTPUT_AUDIO_SAMPLE_RATE_HZ = 44100; // Must match the input stream.
 
     /** Whether to copy the video from the test video. */
@@ -225,10 +225,10 @@ public class VideoCompressor {
                 MediaFormat inputFormat = audioExtractor.getTrackFormat(audioInputTrack);
                 MediaFormat outputAudioFormat =
                         MediaFormat.createAudioFormat(
-                                OUTPUT_AUDIO_MIME_TYPE, OUTPUT_AUDIO_SAMPLE_RATE_HZ,
-                                OUTPUT_AUDIO_CHANNEL_COUNT);
-                outputAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, OUTPUT_AUDIO_BIT_RATE);
-                outputAudioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, OUTPUT_AUDIO_AAC_PROFILE);
+                                OUTPUT_AUDIO_MIME_TYPE, inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+                                inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
+                outputAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE));
+                outputAudioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
                 // Create a MediaCodec for the desired codec, then configure it as an encoder with
                 // our desired properties. Request a Surface to use for input.
                 audioEncoder = createAudioEncoder(audioCodecInfo, outputAudioFormat);
