@@ -440,6 +440,7 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
             NSURL *videoDestinationURL = [NSURL fileURLWithPath:path];
             NSString *compressedFileName = @"compressed";
             compressedFileName = [compressedFileName stringByAppendingString:fileName];
+            compressedFileName = [compressedFileName stringByReplacingOccurrencesOfString:@".MOV" withString:@".mp4"];
             NSString *compressedPath = [[NSTemporaryDirectory()stringByStandardizingPath] stringByAppendingPathComponent:compressedFileName];
             NSURL *compressedVideoURL = [NSURL fileURLWithPath:compressedPath];
 
@@ -569,6 +570,7 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
     NSString *fileName = videoDestinationURL.lastPathComponent;
     NSString *compressedFileName = @"compressed";
     compressedFileName = [compressedFileName stringByAppendingString:fileName];
+    compressedFileName = [compressedFileName stringByReplacingOccurrencesOfString:@".MOV" withString:@".mp4"];
     NSString *compressedPath = [[NSTemporaryDirectory()stringByStandardizingPath] stringByAppendingPathComponent:compressedFileName];
     NSURL *compressedVideoURL = [NSURL fileURLWithPath:compressedPath];
     NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -673,7 +675,7 @@ RCT_EXPORT_METHOD(showImagePicker:(NSDictionary *)options callback:(RCTResponseS
     AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:inputURL options:nil];
     AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:urlAsset presetName:AVAssetExportPresetMediumQuality];
     exportSession.outputURL = outputURL;
-    exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+    exportSession.outputFileType = AVFileTypeMPEG4;// AVFileTypeQuickTimeMovie;
     exportSession.shouldOptimizeForNetworkUse = YES;
     CMTimeRange timeRange;
     if (duration > 0 && duration< CMTimeGetSeconds(exportSession.asset.duration)) {
