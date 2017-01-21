@@ -18,6 +18,7 @@ import android.util.Log;
 import android.view.Surface;
 import java.io.File;
 import java.io.IOException;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.InflaterOutputStream;
@@ -49,6 +50,8 @@ public class VideoCompressor {
     private boolean mCopyVideo = true;
     /** Whether to copy the audio from the test video. */
     private boolean mCopyAudio = true;
+    /** Wether the input audio is a single source */
+    private boolean monoChannel = false;
     /** Width of the output frames. */
     private int mWidth = -1;
     /** Height of the output frames. */
@@ -219,21 +222,33 @@ public class VideoCompressor {
             if (mCopyAudio) {
                 audioExtractor = createExtractor();
                 int audioInputTrack = getAndSelectAudioTrackIndex(audioExtractor);
-                if (startTime>0) {
-                    audioExtractor.seekTo( startTime * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC );
+                if (audioInputTrack==-1) {
+                    if(VERBOSE) Log.i(TAG,"No audio found, will disable");
+                    mCopyAudio = false;
+                } else {
+                    if(VERBOSE) Log.i(TAG, "Audio found");
+                    if (startTime > 0) {
+                        audioExtractor.seekTo(startTime * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                    }
+                    MediaFormat inputFormat = audioExtractor.getTrackFormat(audioInputTrack);
+                    int sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+                    int channels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                    if (channels == 1) {
+                        sampleRate *= 2;
+                        monoChannel = true;
+                    }
+                    MediaFormat outputAudioFormat =
+                            MediaFormat.createAudioFormat(
+                                    OUTPUT_AUDIO_MIME_TYPE, sampleRate,
+                                    channels);
+                    outputAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE));
+                    outputAudioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
+                    // Create a MediaCodec for the desired codec, then configure it as an encoder with
+                    // our desired properties. Request a Surface to use for input.
+                    audioEncoder = createAudioEncoder(audioCodecInfo, outputAudioFormat);
+                    // Create a MediaCodec for the decoder, based on the extractor's format.
+                    audioDecoder = createAudioDecoder(inputFormat);
                 }
-                MediaFormat inputFormat = audioExtractor.getTrackFormat(audioInputTrack);
-                MediaFormat outputAudioFormat =
-                        MediaFormat.createAudioFormat(
-                                OUTPUT_AUDIO_MIME_TYPE, inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-                                inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
-                outputAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE));
-                outputAudioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
-                // Create a MediaCodec for the desired codec, then configure it as an encoder with
-                // our desired properties. Request a Surface to use for input.
-                audioEncoder = createAudioEncoder(audioCodecInfo, outputAudioFormat);
-                // Create a MediaCodec for the decoder, based on the extractor's format.
-                audioDecoder = createAudioDecoder(inputFormat);
             }
             // Creates a muxer but do not start or add tracks just yet.
             muxer = createMuxer();
@@ -404,6 +419,10 @@ public class VideoCompressor {
      * @param inputFormat the format of the stream to decode
      */
     private MediaCodec createAudioDecoder(MediaFormat inputFormat) throws IOException {
+        if (VERBOSE) {
+            Log.i(TAG, "Audio input format: "+ inputFormat.getString(MediaFormat.KEY_MIME));
+            Log.i(TAG, "Audio input MimeType: "+ getMimeTypeFor(inputFormat));
+        }
         MediaCodec decoder = MediaCodec.createDecoderByType(getMimeTypeFor(inputFormat));
         decoder.configure(inputFormat, null, null, 0);
         decoder.start();
@@ -564,6 +583,7 @@ public class VideoCompressor {
                 if (VERBOSE) {
                     Log.d(TAG, "video extractor: returned buffer of size " + size);
                     Log.d(TAG, "video extractor: returned buffer for time " + presentationTime);
+                    Log.d(TAG, "video extractor: endtime " + endTime);
                 }
                 if (presentationTime / 1000 >= endTime) {
                     videoExtractorDone = true;
@@ -610,6 +630,7 @@ public class VideoCompressor {
                 if (VERBOSE) {
                     Log.d(TAG, "audio extractor: returned buffer of size " + size);
                     Log.d(TAG, "audio extractor: returned buffer for time " + presentationTime);
+                    Log.d(TAG, "audio extractor: endTime " + endTime);
                 }
                 if (presentationTime / 1000 >= endTime) {
                     audioExtractorDone = true;
@@ -787,7 +808,19 @@ public class VideoCompressor {
                     decoderOutputBuffer.position(audioDecoderOutputBufferInfo.offset);
                     decoderOutputBuffer.limit(audioDecoderOutputBufferInfo.offset + size);
                     encoderInputBuffer.position(0);
-                    encoderInputBuffer.put(decoderOutputBuffer);
+                    try {
+                        encoderInputBuffer.put(decoderOutputBuffer);
+                    } catch (BufferOverflowException e) {
+                        if (monoChannel) {
+                            byte[] dst = new byte[encoderInputBuffer.capacity()];
+                            for (int i = 0; i < dst.length; i += 2) {
+                                dst[i] = decoderOutputBuffer.get(i * 2);
+                                dst[i + 1] = decoderOutputBuffer.get(i * 2 + 1);
+                            }
+                            encoderInputBuffer.put(dst);
+                            size = dst.length;
+                        }
+                    }
                     audioEncoder.queueInputBuffer(
                             encoderInputBufferIndex,
                             0,
