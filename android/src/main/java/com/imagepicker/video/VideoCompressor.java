@@ -17,8 +17,12 @@ import android.util.Log;
 import java.io.File;
 import java.nio.ByteBuffer;
 
-/**
- * Created by camlahoud on 3/24/17.
+/*
+ * This is the source code of Telegram for Android v. 1.3.x.
+ * It is licensed under GNU GPL v. 2 or later.
+ * You should have received a copy of the license in this archive (see LICENSE).
+ *
+ * Copyright Nikolai Kudashov, 2013-2016.
  */
 
 public class VideoCompressor {
