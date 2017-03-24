@@ -39,6 +39,7 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.imagepicker.video.VideoCompressor;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -785,6 +786,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
   class ResampleTask extends AsyncTask<Uri, Void, Uri> {
 
     private Exception exceptionToThrow = null;
+    private boolean convertSuccess;
     private int durationLimit = 0;
 
     public ResampleTask setDurationLimit(int limit) {
@@ -805,33 +807,31 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
 //      Log.i("ReactNative","Starting background: " + inputUri.toString());
 //      Log.i("ReactNative","Destination: " + outputUri.toString());
 
-      VideoCompressor resampler = new VideoCompressor(inputUri.toString(), outputUri.toString());
-//      int rotation = MediaHelper.GetRotation(inputUri);
-//      int width = MediaHelper.GetWidth(inputUri);
-//      int height = MediaHelper.GetHeight(inputUri);
-      MediaMetadataRetriever metaRetriever = new MediaMetadataRetriever();
-      metaRetriever.setDataSource(inputUri.toString());
-      Bitmap frame = metaRetriever.getFrameAtTime();
-      int width = frame.getWidth();
-      int height = frame.getHeight();
-      int twidth, theight;
-      if (width > height) {
-        twidth = 568;
-        theight = 320;
-      } else {
-        theight = 568;
-        twidth = 320;
-      }
-      resampler.setSize(twidth, theight);
+      VideoCompressor resampler = new VideoCompressor();
+
+//      MediaMetadataRetriever metaRetriever = new MediaMetadataRetriever();
+//      metaRetriever.setDataSource(inputUri.toString());
+//      Bitmap frame = metaRetriever.getFrameAtTime();
+//      int width = frame.getWidth();
+//      int height = frame.getHeight();
+//      int twidth, theight;
+//      if (width > height) {
+//        twidth = 568;
+//        theight = 320;
+//      } else {
+//        theight = 568;
+//        twidth = 320;
+//      }
+      resampler.setSize(568, 320);
       resampler.setOutputVideoBitrate( 839000 );
-      resampler.setOutputVideoFramerate( 30 );
-      resampler.setOutputVideoIFrameInterval( 10 );
+//      resampler.setOutputVideoFramerate( 30 );
+//      resampler.setOutputVideoIFrameInterval( 10 );
       if (durationLimit > 0) {
         resampler.setEndTime(durationLimit);
       }
 
       try {
-        resampler.extractDecodeEditEncodeMux();
+        convertSuccess = resampler.convertVideo(inputUri.toString(), outputUri.toString());
       } catch (Exception e) {
         e.printStackTrace();
         exceptionToThrow = e;
@@ -844,6 +844,11 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     protected void onPostExecute( Uri outputUri ) {
       if (exceptionToThrow!=null) {
         response.putString("error","An error occurred: "+ exceptionToThrow.getMessage());
+        mCallback.invoke(response);
+        return;
+      }
+      if (!convertSuccess) {
+        response.putString("error","An error occurred while converting");
         mCallback.invoke(response);
         return;
       }
